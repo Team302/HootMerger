@@ -358,31 +358,201 @@ class PhoenixHootExtractor:
         max_steps: int = 2_000_000,
         parser_mode: str = "auto",
         owlet_executable: str | None = None,
+        strict_owlet_match: bool = False,
     ) -> None:
         self._step_seconds = step_seconds
         self._max_steps = max_steps
         self._parser_mode = parser_mode
         self._owlet_executable = owlet_executable
+        self._strict_owlet_match = strict_owlet_match
 
     @staticmethod
-    def _find_owlet_executable(explicit_path: str | None = None) -> str | None:
+    def _extract_compliancy_from_owlet_name(path: Path) -> int | None:
+        match = re.search(r"-C(\d+)", path.name, flags=re.IGNORECASE)
+        if not match:
+            return None
+        try:
+            return int(match.group(1))
+        except ValueError:
+            return None
+
+    @classmethod
+    def _format_available_owlet_versions(cls, candidates: list[Path]) -> str:
+        if not candidates:
+            return "none found"
+
+        labels: list[str] = []
+        for candidate in candidates:
+            compliancy = cls._extract_compliancy_from_owlet_name(candidate)
+            if compliancy is None:
+                labels.append(candidate.name)
+            else:
+                labels.append(f"{candidate.name} (C{compliancy})")
+        return ", ".join(labels)
+
+    @staticmethod
+    def _read_hoot_compliancy(hoot_path: Path) -> int | None:
+        try:
+            with hoot_path.open("rb") as fh:
+                fh.seek(70)
+                data = fh.read(2)
+            if len(data) < 1:
+                return None
+            return data[0]
+        except OSError:
+            return None
+
+    @classmethod
+    def _find_owlet_executable(
+        cls,
+        hoot_path: Path,
+        explicit_path: str | None = None,
+        strict_match: bool = False,
+    ) -> str | None:
+        compliancy = cls._read_hoot_compliancy(hoot_path)
+        required_str = f"C{compliancy}" if compliancy is not None else "unknown compliancy"
+
         if explicit_path:
             p = Path(explicit_path)
-            if p.exists():
+            if p.is_file():
+                parsed = cls._extract_compliancy_from_owlet_name(p)
+                if compliancy is not None:
+                    if parsed is None:
+                        print(
+                            f"[WARN] Could not verify compliancy from explicit owlet filename: {p}. {hoot_path} requires {required_str}.",
+                            file=sys.stderr,
+                        )
+                        if strict_match:
+                            print(
+                                f"[WARN] strict owlet matching is enabled; refusing unverified owlet executable: {p}",
+                                file=sys.stderr,
+                            )
+                            return None
+                    elif parsed != compliancy:
+                        print(
+                            f"[WARN] {hoot_path} requires owlet compliancy {required_str}, but explicit owlet is C{parsed}: {p}",
+                            file=sys.stderr,
+                        )
+                        if strict_match:
+                            print(
+                                "[WARN] strict owlet matching is enabled; refusing mismatched owlet executable.",
+                                file=sys.stderr,
+                            )
+                            return None
                 return str(p)
-        local = sorted(Path.cwd().glob("owlet*.exe"))
+            if p.is_dir():
+                all_candidates = sorted(p.glob("owlet*.exe"))
+                if compliancy is not None:
+                    matches = sorted(p.glob(f"owlet-*-C{compliancy}*.exe"))
+                    if matches:
+                        return str(matches[0])
+                    print(
+                        f"[WARN] {hoot_path} requires owlet compliancy {required_str}, but no matching binary was found in {p}. "
+                        f"Available: {cls._format_available_owlet_versions(all_candidates)}",
+                        file=sys.stderr,
+                    )
+                    if strict_match:
+                        print(
+                            "[WARN] strict owlet matching is enabled; aborting owlet selection.",
+                            file=sys.stderr,
+                        )
+                        return None
+                any_matches = all_candidates
+                if any_matches:
+                    return str(any_matches[0])
+                print(
+                    f"[WARN] No owlet binaries found in {p}. {hoot_path} needs owlet compliancy {required_str}.",
+                    file=sys.stderr,
+                )
+
+        cwd = Path.cwd()
+        cwd_candidates = sorted(cwd.glob("owlet*.exe"))
+        if compliancy is not None:
+            matches = sorted(cwd.glob(f"owlet-*-C{compliancy}*.exe"))
+            if matches:
+                return str(matches[0])
+            if cwd_candidates:
+                print(
+                    f"[WARN] {hoot_path} requires owlet compliancy {required_str}, but no matching local binary was found. "
+                    f"Available: {cls._format_available_owlet_versions(cwd_candidates)}",
+                    file=sys.stderr,
+                )
+                if strict_match:
+                    print(
+                        "[WARN] strict owlet matching is enabled; aborting owlet selection.",
+                        file=sys.stderr,
+                    )
+                    return None
+        local = sorted(cwd.glob("owlet*.exe"))
         if local:
             return str(local[0])
+        if compliancy is not None:
+            print(
+                f"[WARN] No owlet binary found. {hoot_path} needs owlet compliancy {required_str}.",
+                file=sys.stderr,
+            )
         return None
 
+    @staticmethod
+    def _scan_owlet_signal_ids(owlet: str, hoot_path: Path) -> list[str]:
+        scan_cmd = [owlet, str(hoot_path), os.devnull, "--scan", "--full-scan"]
+        run = subprocess.run(scan_cmd, capture_output=True, text=True)
+        if run.returncode != 0:
+            return []
+
+        text = (run.stdout or "") + "\n" + (run.stderr or "")
+        signal_ids: list[str] = []
+        seen: set[str] = set()
+        for line in text.splitlines():
+            match = re.search(r":\s*([0-9a-fA-F]+)\s*$", line)
+            if not match:
+                continue
+            signal_id = match.group(1).lower()
+            if signal_id not in seen:
+                seen.add(signal_id)
+                signal_ids.append(signal_id)
+        return signal_ids
+
     def _read_file_with_owlet(self, hoot_path: Path) -> FileReadResult | None:
-        owlet = self._find_owlet_executable(self._owlet_executable)
+        owlet = self._find_owlet_executable(
+            hoot_path,
+            self._owlet_executable,
+            strict_match=self._strict_owlet_match,
+        )
         if owlet is None:
             return None
 
+        compliancy = self._read_hoot_compliancy(hoot_path)
+        if compliancy is not None and compliancy < 6:
+            print(
+                f"[WARN] {hoot_path} appears too old for modern owlet decoding (compliancy {compliancy})",
+                file=sys.stderr,
+            )
+
+        check_pro_cmd = [owlet, str(hoot_path), "--check-pro"]
+        check_pro_run = subprocess.run(check_pro_cmd, capture_output=True, text=True)
+        if check_pro_run.returncode == 0:
+            out = (check_pro_run.stdout or "")
+            if "NOT" in out:
+                print(
+                    f"[WARN] {hoot_path} may include limited Phoenix signals (non-Pro content reported by owlet).",
+                    file=sys.stderr,
+                )
+
         temp_output = Path(tempfile.gettempdir()) / f"{hoot_path.stem}.owlet.wpilog"
-        cmd = [owlet, str(hoot_path), str(temp_output), "--format=wpilog", "--unlicensed"]
+        cmd = [owlet, str(hoot_path), str(temp_output), "-f", "wpilog"]
+
+        signal_ids = self._scan_owlet_signal_ids(owlet, hoot_path)
+        if signal_ids:
+            cmd.append(f"--signals={','.join(signal_ids)}")
+
         run = subprocess.run(cmd, capture_output=True, text=True)
+        if run.returncode != 0:
+            fallback_cmd = [owlet, str(hoot_path), str(temp_output), "--format=wpilog", "--unlicensed"]
+            if signal_ids:
+                fallback_cmd.append(f"--signals={','.join(signal_ids)}")
+            run = subprocess.run(fallback_cmd, capture_output=True, text=True)
+
         if not temp_output.exists() or temp_output.stat().st_size == 0:
             if run.returncode != 0:
                 print(
@@ -668,7 +838,12 @@ def parse_args(argv: Iterable[str]) -> argparse.Namespace:
     parser.add_argument(
         "--owlet",
         default=None,
-        help="Path to owlet executable (if omitted, searches current directory for owlet*.exe)",
+        help="Path to owlet executable or directory containing owlet binaries (if omitted, searches current directory)",
+    )
+    parser.add_argument(
+        "--strict-owlet-match",
+        action="store_true",
+        help="Require exact owlet compliancy match (C#) for each .hoot file; do not fall back to mismatched binaries",
     )
     return parser.parse_args(list(argv))
 
@@ -690,6 +865,7 @@ def main(argv: Iterable[str]) -> int:
         step_seconds=args.step_seconds,
         parser_mode=args.parser,
         owlet_executable=args.owlet,
+        strict_owlet_match=args.strict_owlet_match,
     )
     results: list[FileReadResult] = []
 

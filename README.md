@@ -36,18 +36,27 @@ python merge_hoot.py <log1.hoot> <log2.hoot> ... -o merged.wpilog
 python merge_hoot.py <log1.hoot> <log2.hoot> ... -o merged.wpilog --parser owlet --owlet .\owlet-25.4.1-windowsx86-64.exe
 ```
 
+### Strict owlet compliancy matching
+
+```powershell
+python merge_hoot.py <log1.hoot> <log2.hoot> ... -o merged.wpilog --parser owlet --owlet . --strict-owlet-match
+```
+
+When strict mode is enabled, each `.hoot` file must find a matching owlet binary with the same compliancy tag (`C#`, e.g. `C7`). The script will not fall back to mismatched binaries.
+
 ### Options
 
 - `-o, --output` (required): output `.wpilog` path
 - `--step-seconds`: replay sampling step for replay backend (default `0.02`)
 - `--metadata`: extra WPILog header metadata string
 - `--parser`: `auto`, `owlet`, or `replay` (default `auto`)
-- `--owlet`: path to owlet executable (if omitted, searches current folder for `owlet*.exe`)
+- `--owlet`: path to owlet executable, or a directory containing owlet binaries
+- `--strict-owlet-match`: require exact owlet compliancy match (`C#`) per input file
 
 ### Signal naming behavior
 
 - Output uses original signal names (no filename prefix)
-- If a name conflicts across files, suffixes are added: `-2`, `-3`, etc.
+- If a name conflicts across files, suffixes are added: `-log2`, `-log3`, etc.
 
 ### Boolean behavior
 
