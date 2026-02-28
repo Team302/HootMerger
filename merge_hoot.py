@@ -63,6 +63,9 @@ def _should_force_boolean(signal_name: str) -> bool:
     if "isprolicensed" in low:
         return True
 
+    if low.endswith("/s1closed") or low.endswith("/s2closed"):
+        return True
+
     return False
 
 
