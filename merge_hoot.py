@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import subprocess
 import struct
 import sys
 import tempfile
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterable
@@ -338,6 +341,10 @@ class WPILogReader:
 
 
 class PhoenixHootExtractor:
+    _OWLET_INDEX_URL = "https://redist.ctr-electronics.com/index.json"
+    _OWLET_VERSION_COMPLIANCY: dict[str, int] | None = None
+    _OWLET_INDEX_ATTEMPTED = False
+
     _GETTER_SPECS: list[tuple[str, str]] = [
         ("double", "get_double"),
         ("float", "get_float"),
@@ -367,14 +374,55 @@ class PhoenixHootExtractor:
         self._strict_owlet_match = strict_owlet_match
 
     @staticmethod
-    def _extract_compliancy_from_owlet_name(path: Path) -> int | None:
-        match = re.search(r"-C(\d+)", path.name, flags=re.IGNORECASE)
+    def _extract_version_from_owlet_name(path: Path) -> str | None:
+        match = re.search(r"owlet-(\d+\.\d+\.\d+)", path.name, flags=re.IGNORECASE)
         if not match:
             return None
+        return match.group(1)
+
+    @classmethod
+    def _load_owlet_index_if_needed(cls) -> None:
+        if cls._OWLET_INDEX_ATTEMPTED:
+            return
+        cls._OWLET_INDEX_ATTEMPTED = True
+        cls._OWLET_VERSION_COMPLIANCY = {}
+
         try:
-            return int(match.group(1))
-        except ValueError:
+            with urllib.request.urlopen(cls._OWLET_INDEX_URL, timeout=8) as response:
+                data = json.load(response)
+        except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError):
+            return
+
+        try:
+            tools = data.get("Tools", [])
+            owlet_tool = next(tool for tool in tools if tool.get("Name") == "owlet")
+            items = owlet_tool.get("Items", [])
+        except (StopIteration, AttributeError):
+            return
+
+        for item in items:
+            version = item.get("Version")
+            compliancy = item.get("Compliancy")
+            if isinstance(version, str) and isinstance(compliancy, int):
+                cls._OWLET_VERSION_COMPLIANCY[version] = compliancy
+
+    @classmethod
+    def _extract_compliancy_from_owlet_name(cls, path: Path) -> int | None:
+        match = re.search(r"-C(\d+)", path.name, flags=re.IGNORECASE)
+        if match:
+            try:
+                return int(match.group(1))
+            except ValueError:
+                return None
+
+        version = cls._extract_version_from_owlet_name(path)
+        if version is None:
             return None
+
+        cls._load_owlet_index_if_needed()
+        if cls._OWLET_VERSION_COMPLIANCY is None:
+            return None
+        return cls._OWLET_VERSION_COMPLIANCY.get(version)
 
     @classmethod
     def _format_available_owlet_versions(cls, candidates: list[Path]) -> str:
@@ -443,7 +491,11 @@ class PhoenixHootExtractor:
             if p.is_dir():
                 all_candidates = sorted(p.glob("owlet*.exe"))
                 if compliancy is not None:
-                    matches = sorted(p.glob(f"owlet-*-C{compliancy}*.exe"))
+                    matches = [
+                        candidate
+                        for candidate in all_candidates
+                        if cls._extract_compliancy_from_owlet_name(candidate) == compliancy
+                    ]
                     if matches:
                         return str(matches[0])
                     print(
@@ -468,7 +520,11 @@ class PhoenixHootExtractor:
         cwd = Path.cwd()
         cwd_candidates = sorted(cwd.glob("owlet*.exe"))
         if compliancy is not None:
-            matches = sorted(cwd.glob(f"owlet-*-C{compliancy}*.exe"))
+            matches = [
+                candidate
+                for candidate in cwd_candidates
+                if cls._extract_compliancy_from_owlet_name(candidate) == compliancy
+            ]
             if matches:
                 return str(matches[0])
             if cwd_candidates:
