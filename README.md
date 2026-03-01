@@ -33,6 +33,7 @@ If owlet is missing, the GUI shows:
 - Detected required owlet compliancy from selected `.hoot` files (for example `C7`)
 - Matching owlet version labels when CTRE index data is available at runtime
 
+Note: The `owlet*.exe` binaries are not included in this repository and are treated as external tools. Download them separately using the link above and place them alongside your logs or the GUI executable; do not add `owlet*.exe` files to git.
 ## Build Windows EXE (PyInstaller)
 
 Install dependencies:
