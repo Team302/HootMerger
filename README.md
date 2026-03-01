@@ -25,7 +25,13 @@ GUI behavior:
 - Optional toggle: write `missing_signals.csv`
 - Optional toggle: write `signals.csv`
 
-The GUI attempts to locate `owlet*.exe` in the selected folder.
+The GUI attempts to locate `owlet*.exe` in the selected folder, next to the app, or in the current working folder.
+
+If owlet is missing, the GUI shows:
+
+- Download link: `https://docs.ctr-electronics.com/cli-tools.html`
+- Detected required owlet compliancy from selected `.hoot` files (for example `C7`)
+- Matching owlet version labels when CTRE index data is available at runtime
 
 ## Build Windows EXE (PyInstaller)
 
