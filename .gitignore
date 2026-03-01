@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+*.pyc
+*.wpilog
+*.csv
+owlet*.exe
