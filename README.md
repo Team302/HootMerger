@@ -40,7 +40,6 @@ Install dependencies:
 
 ```powershell
 python -m pip install -r requirements.txt
-python -m pip install pyinstaller
 ```
 
 Build with included script:
@@ -76,6 +75,8 @@ Script: `merge_hoot.py`
 ```powershell
 python merge_hoot.py <log1.hoot> <log2.hoot> ... -o merged.wpilog
 ```
+
+You can also pass one or more folders; each folder contributes all top-level `.hoot` files.
 
 ### Recommended usage (Owlet backend)
 
