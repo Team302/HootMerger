@@ -163,6 +163,8 @@ class HootMergerGui:
                 return
 
             output_wpilog = folder / OUTPUT_WPILOG
+            self._post_log("Beginning WPILog write stage...")
+            self._post_log(f"Writing merged output to: {output_wpilog}")
             entry_count, min_ts, max_ts = merge_to_wpilog(results, output_wpilog, metadata="Merged CTRE hoot logs")
             if min_ts is None or max_ts is None:
                 self._post_log("No merged records were written.")
@@ -170,6 +172,7 @@ class HootMergerGui:
                 return
             completed_steps += 1
             self._post_progress(completed_steps, total_steps)
+            self._post_log("WPILog write stage complete.")
 
             self._post_log(f"Wrote {output_wpilog.name}")
             self._post_log(f"Source files with data: {readable_sources}")
