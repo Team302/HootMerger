@@ -298,7 +298,7 @@ class WPILogReader:
         if type_name.startswith("struct:") or type_name.startswith("proto:"):
             return (type_name, payload)
 
-        return ("raw", payload)
+        return (type_name, payload)
 
     def read_samples(self) -> list[Sample]:
         entries: dict[int, tuple[str, str, str]] = {}
