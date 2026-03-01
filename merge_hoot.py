@@ -46,6 +46,13 @@ SUPPORTED_WPILOG_TYPES = {"double", "float", "int64", "boolean", "string", "doub
 GAP_WARNING_US = 500_000
 
 
+def _run_subprocess_capture(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+    kwargs: dict[str, Any] = {"capture_output": True, "text": True}
+    if os.name == "nt" and hasattr(subprocess, "CREATE_NO_WINDOW"):
+        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+    return subprocess.run(cmd, **kwargs)
+
+
 @dataclass(frozen=True)
 class Sample:
     name: str
@@ -569,7 +576,7 @@ class PhoenixHootExtractor:
     @staticmethod
     def _scan_owlet_signal_ids(owlet: str, hoot_path: Path) -> list[str]:
         scan_cmd = [owlet, str(hoot_path), os.devnull, "--scan", "--full-scan"]
-        run = subprocess.run(scan_cmd, capture_output=True, text=True)
+        run = _run_subprocess_capture(scan_cmd)
         if run.returncode != 0:
             return []
 
@@ -603,7 +610,7 @@ class PhoenixHootExtractor:
             )
 
         check_pro_cmd = [owlet, str(hoot_path), "--check-pro"]
-        check_pro_run = subprocess.run(check_pro_cmd, capture_output=True, text=True)
+        check_pro_run = _run_subprocess_capture(check_pro_cmd)
         if check_pro_run.returncode == 0:
             out = (check_pro_run.stdout or "")
             if "NOT" in out:
@@ -619,12 +626,12 @@ class PhoenixHootExtractor:
         if signal_ids:
             cmd.append(f"--signals={','.join(signal_ids)}")
 
-        run = subprocess.run(cmd, capture_output=True, text=True)
+        run = _run_subprocess_capture(cmd)
         if run.returncode != 0:
             fallback_cmd = [owlet, str(hoot_path), str(temp_output), "--format=wpilog", "--unlicensed"]
             if signal_ids:
                 fallback_cmd.append(f"--signals={','.join(signal_ids)}")
-            run = subprocess.run(fallback_cmd, capture_output=True, text=True)
+            run = _run_subprocess_capture(fallback_cmd)
 
         if not temp_output.exists() or temp_output.stat().st_size == 0:
             if run.returncode != 0:

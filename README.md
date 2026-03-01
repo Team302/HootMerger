@@ -5,6 +5,53 @@ Utilities for working with CTRE Phoenix hoot logs:
 - `merge_hoot.py`: merge one or more `.hoot` logs into a single `.wpilog`
 - `list_signals_csv.py`: list all signal names/types from `.hoot` or `.wpilog` into a CSV
 - `audit_missing_signals.py`: compare source logs to merged `.wpilog` and output missing signals to CSV
+- `hoot_merger_gui.py`: simple folder-based GUI for batch conversion
+
+## GUI (folder workflow)
+
+Script: `hoot_merger_gui.py`
+
+Run:
+
+```powershell
+python hoot_merger_gui.py
+```
+
+GUI behavior:
+
+- Pick a folder containing `.hoot` files
+- Click **Convert Folder**
+- Always writes `merged.wpilog` in that same folder
+- Optional toggle: write `missing_signals.csv`
+- Optional toggle: write `signals.csv`
+
+The GUI attempts to locate `owlet*.exe` in the selected folder, next to the app, or in the current working folder.
+
+If owlet is missing, the GUI shows:
+
+- Download link: `https://docs.ctr-electronics.com/cli-tools.html`
+- Detected required owlet compliancy from selected `.hoot` files (for example `C7`)
+- Matching owlet version labels when CTRE index data is available at runtime
+
+Note: The `owlet*.exe` binaries are not included in this repository and are treated as external tools. Download them separately using the link above and place them alongside your logs or the GUI executable; do not add `owlet*.exe` files to git.
+## Build Windows EXE (PyInstaller)
+
+Install dependencies:
+
+```powershell
+python -m pip install -r requirements.txt
+python -m pip install pyinstaller
+```
+
+Build with included script:
+
+```powershell
+.\build_gui_exe.ps1
+```
+
+Output:
+
+- `dist\HootMergerGUI.exe`
 
 ## Requirements
 

@@ -4,3 +4,6 @@ __pycache__/
 *.wpilog
 *.csv
 owlet*.exe
+build/
+dist/
+*.spec

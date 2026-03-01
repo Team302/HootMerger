@@ -1,0 +1,37 @@
+name: Build GUI EXE
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-windows-exe:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Build GUI EXE
+        shell: pwsh
+        run: |
+          .\build_gui_exe.ps1
+
+      - name: Upload EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: HootMergerGUI-windows
+          path: dist/HootMergerGUI.exe
+          if-no-files-found: error
