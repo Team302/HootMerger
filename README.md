@@ -40,7 +40,6 @@ Install dependencies:
 
 ```powershell
 python -m pip install -r requirements.txt
-python -m pip install pyinstaller
 ```
 
 Build with included script:
