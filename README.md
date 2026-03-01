@@ -76,6 +76,8 @@ Script: `merge_hoot.py`
 python merge_hoot.py <log1.hoot> <log2.hoot> ... -o merged.wpilog
 ```
 
+You can also pass one or more folders; each folder contributes all top-level `.hoot` files.
+
 ### Recommended usage (Owlet backend)
 
 ```powershell

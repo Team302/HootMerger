@@ -42,7 +42,7 @@ except ModuleNotFoundError:
 CONTROL_START = 0
 CONTROL_FINISH = 1
 CONTROL_SET_METADATA = 2
-SUPPORTED_WPILOG_TYPES = {"double", "float", "int64", "boolean", "string", "double[]", "float[]"}
+SUPPORTED_WPILOG_TYPES = {"double", "float", "int64", "boolean", "string", "double[]", "float[]", "raw"}
 GAP_WARNING_US = 500_000
 
 
@@ -170,7 +170,13 @@ class WPILogWriter:
         self._write_record(0, timestamp_us, bytes(payload))
 
     def append_record(self, entry_id: int, timestamp_us: int, type_name: str, value: Any) -> None:
-        if type_name not in SUPPORTED_WPILOG_TYPES:
+        is_raw_like = (
+            type_name == "raw"
+            or type_name.startswith("struct:")
+            or type_name.startswith("proto:")
+            or type_name in {"json", "msgpack"}
+        )
+        if type_name not in SUPPORTED_WPILOG_TYPES and not is_raw_like:
             raise ValueError(f"unsupported WPILog type: {type_name}")
 
         if type_name == "double":
@@ -187,6 +193,13 @@ class WPILogWriter:
             payload = b"".join(struct.pack("<d", float(v)) for v in value)
         elif type_name == "float[]":
             payload = b"".join(struct.pack("<f", float(v)) for v in value)
+        elif is_raw_like:
+            if isinstance(value, bytes):
+                payload = value
+            elif isinstance(value, bytearray):
+                payload = bytes(value)
+            else:
+                raise ValueError(f"raw-like type '{type_name}' requires bytes payload")
         else:
             raise ValueError(f"unhandled type: {type_name}")
 
@@ -240,7 +253,7 @@ class WPILogReader:
         if type_name == "string":
             return ("string", payload.decode("utf-8", errors="replace"))
         if type_name in {"json", "msgpack", "raw"}:
-            return ("string", payload.hex())
+            return (type_name, payload)
         if type_name == "double[]":
             if (len(payload) % 8) != 0:
                 return None
@@ -281,7 +294,11 @@ class WPILogReader:
                 values.append(payload[pos:end].decode("utf-8", errors="replace"))
                 pos = end
             return ("string", ",".join(values))
-        return None
+
+        if type_name.startswith("struct:") or type_name.startswith("proto:"):
+            return (type_name, payload)
+
+        return ("raw", payload)
 
     def read_samples(self) -> list[Sample]:
         entries: dict[int, tuple[str, str, str]] = {}
@@ -622,15 +639,9 @@ class PhoenixHootExtractor:
         temp_output = Path(tempfile.gettempdir()) / f"{hoot_path.stem}.owlet.wpilog"
         cmd = [owlet, str(hoot_path), str(temp_output), "-f", "wpilog"]
 
-        signal_ids = self._scan_owlet_signal_ids(owlet, hoot_path)
-        if signal_ids:
-            cmd.append(f"--signals={','.join(signal_ids)}")
-
         run = _run_subprocess_capture(cmd)
         if run.returncode != 0:
             fallback_cmd = [owlet, str(hoot_path), str(temp_output), "--format=wpilog", "--unlicensed"]
-            if signal_ids:
-                fallback_cmd.append(f"--signals={','.join(signal_ids)}")
             run = _run_subprocess_capture(fallback_cmd)
 
         if not temp_output.exists() or temp_output.stat().st_size == 0:
@@ -928,6 +939,37 @@ def parse_args(argv: Iterable[str]) -> argparse.Namespace:
     return parser.parse_args(list(argv))
 
 
+def _expand_input_paths(raw_inputs: list[Path]) -> list[Path]:
+    expanded: list[Path] = []
+    seen: set[Path] = set()
+
+    for raw in raw_inputs:
+        if not raw.exists():
+            print(f"[WARN] File or directory does not exist: {raw}", file=sys.stderr)
+            continue
+
+        if raw.is_dir():
+            hoot_files = sorted(path for path in raw.iterdir() if path.is_file() and path.suffix.lower() == ".hoot")
+            if not hoot_files:
+                print(f"[WARN] No .hoot files found in directory: {raw}", file=sys.stderr)
+                continue
+            for path in hoot_files:
+                resolved = path.resolve()
+                if resolved in seen:
+                    continue
+                seen.add(resolved)
+                expanded.append(path)
+            continue
+
+        resolved = raw.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        expanded.append(raw)
+
+    return expanded
+
+
 def main(argv: Iterable[str]) -> int:
     if HootReplay is None:
         print(
@@ -938,8 +980,12 @@ def main(argv: Iterable[str]) -> int:
 
     args = parse_args(argv)
 
-    hoot_paths = [Path(p) for p in args.hoot_files]
+    hoot_paths = _expand_input_paths([Path(p) for p in args.hoot_files])
     output_path = Path(args.output)
+
+    if not hoot_paths:
+        print("[ERROR] No input .hoot files were found.", file=sys.stderr)
+        return 2
 
     extractor = PhoenixHootExtractor(
         step_seconds=args.step_seconds,
@@ -950,9 +996,6 @@ def main(argv: Iterable[str]) -> int:
     results: list[FileReadResult] = []
 
     for path in hoot_paths:
-        if not path.exists():
-            print(f"[WARN] File does not exist: {path}", file=sys.stderr)
-            continue
         results.append(extractor.read_file(path))
 
     readable_source_files = sum(1 for r in results if r.samples)
