@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import os
 import struct
 import subprocess
 import sys
@@ -106,7 +107,12 @@ def find_owlet(executable: str | None) -> str | None:
         p = Path(executable)
         if p.exists():
             return str(p)
-    local = sorted(Path.cwd().glob("owlet*.exe"))
+
+    local = [
+        candidate
+        for candidate in sorted(Path.cwd().glob("owlet*"))
+        if candidate.is_file() and (candidate.suffix.lower() == ".exe" or os.access(candidate, os.X_OK))
+    ]
     if local:
         return str(local[0])
     return None
@@ -155,7 +161,7 @@ def collect_entries(inputs: list[Path], owlet_exe: str | None) -> list[SignalEnt
         if suffix == ".hoot":
             if owlet_exe is None:
                 print(
-                    f"[WARN] No owlet executable found; cannot parse {path}. Use --owlet or place owlet*.exe in the folder.",
+                    f"[WARN] No owlet executable found; cannot parse {path}. Use --owlet or place owlet* (Linux/macOS) or owlet*.exe (Windows) in the folder.",
                     file=sys.stderr,
                 )
                 continue
@@ -193,7 +199,7 @@ def parse_args(argv: Iterable[str]) -> argparse.Namespace:
     parser.add_argument(
         "--owlet",
         default=None,
-        help="Path to owlet executable (if omitted, searches current directory for owlet*.exe)",
+        help="Path to owlet executable (if omitted, searches current directory for owlet* / owlet*.exe)",
     )
     return parser.parse_args(list(argv))
 

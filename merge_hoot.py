@@ -176,7 +176,8 @@ class WPILogWriter:
             or type_name.startswith("proto:")
             or type_name in {"json", "msgpack"}
         )
-        if type_name not in SUPPORTED_WPILOG_TYPES and not is_raw_like:
+        is_unknown_raw = type_name not in SUPPORTED_WPILOG_TYPES and not is_raw_like
+        if is_unknown_raw and not isinstance(value, (bytes, bytearray)):
             raise ValueError(f"unsupported WPILog type: {type_name}")
 
         if type_name == "double":
@@ -193,7 +194,7 @@ class WPILogWriter:
             payload = b"".join(struct.pack("<d", float(v)) for v in value)
         elif type_name == "float[]":
             payload = b"".join(struct.pack("<f", float(v)) for v in value)
-        elif is_raw_like:
+        elif is_raw_like or is_unknown_raw:
             if isinstance(value, bytes):
                 payload = value
             elif isinstance(value, bytearray):
@@ -421,6 +422,18 @@ class PhoenixHootExtractor:
             return None
         return match.group(1)
 
+    @staticmethod
+    def _is_usable_owlet(path: Path) -> bool:
+        return path.is_file() and (path.suffix.lower() == ".exe" or os.access(path, os.X_OK))
+
+    @classmethod
+    def _find_owlet_candidates(cls, directory: Path) -> list[Path]:
+        return [
+            candidate
+            for candidate in sorted(directory.glob("owlet*"))
+            if cls._is_usable_owlet(candidate)
+        ]
+
     @classmethod
     def _load_owlet_index_if_needed(cls) -> None:
         if cls._OWLET_INDEX_ATTEMPTED:
@@ -530,7 +543,7 @@ class PhoenixHootExtractor:
                             return None
                 return str(p)
             if p.is_dir():
-                all_candidates = sorted(p.glob("owlet*.exe"))
+                all_candidates = cls._find_owlet_candidates(p)
                 if compliancy is not None:
                     matches = [
                         candidate
@@ -559,7 +572,7 @@ class PhoenixHootExtractor:
                 )
 
         cwd = Path.cwd()
-        cwd_candidates = sorted(cwd.glob("owlet*.exe"))
+        cwd_candidates = cls._find_owlet_candidates(cwd)
         if compliancy is not None:
             matches = [
                 candidate
@@ -580,7 +593,7 @@ class PhoenixHootExtractor:
                         file=sys.stderr,
                     )
                     return None
-        local = sorted(cwd.glob("owlet*.exe"))
+        local = cls._find_owlet_candidates(cwd)
         if local:
             return str(local[0])
         if compliancy is not None:
