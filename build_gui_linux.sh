@@ -11,8 +11,6 @@ if ! python3 -c "import tkinter" >/dev/null 2>&1; then
   exit 1
 fi
 
-python3 -m pip install --upgrade pyinstaller
-
 python3 -m PyInstaller \
   --noconfirm \
   --clean \
