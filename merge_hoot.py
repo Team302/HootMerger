@@ -176,7 +176,8 @@ class WPILogWriter:
             or type_name.startswith("proto:")
             or type_name in {"json", "msgpack"}
         )
-        if type_name not in SUPPORTED_WPILOG_TYPES and not is_raw_like:
+        is_unknown_raw = type_name not in SUPPORTED_WPILOG_TYPES and not is_raw_like
+        if is_unknown_raw and not isinstance(value, (bytes, bytearray)):
             raise ValueError(f"unsupported WPILog type: {type_name}")
 
         if type_name == "double":
@@ -193,7 +194,7 @@ class WPILogWriter:
             payload = b"".join(struct.pack("<d", float(v)) for v in value)
         elif type_name == "float[]":
             payload = b"".join(struct.pack("<f", float(v)) for v in value)
-        elif is_raw_like:
+        elif is_raw_like or is_unknown_raw:
             if isinstance(value, bytes):
                 payload = value
             elif isinstance(value, bytearray):
