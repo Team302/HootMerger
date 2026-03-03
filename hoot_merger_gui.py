@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import csv
+import os
 import queue
 import re
 import sys
@@ -204,6 +205,17 @@ class HootMergerGui:
 
     @staticmethod
     def _resolve_owlet_path(selected_folder: Path) -> Path | None:
+        def _is_usable_owlet(path: Path) -> bool:
+            return path.is_file() and (path.suffix.lower() == ".exe" or os.access(path, os.X_OK))
+
+        def _find_candidates(directory: Path) -> list[Path]:
+            candidates = [
+                candidate
+                for candidate in sorted(directory.glob("owlet*"))
+                if _is_usable_owlet(candidate)
+            ]
+            return candidates
+
         search_dirs: list[Path] = [selected_folder]
 
         executable_parent = Path(sys.executable).resolve().parent
@@ -219,7 +231,7 @@ class HootMergerGui:
             search_dirs.append(cwd)
 
         for directory in search_dirs:
-            candidates = sorted(directory.glob("owlet*.exe"))
+            candidates = _find_candidates(directory)
             if candidates:
                 return candidates[0]
 
@@ -238,12 +250,12 @@ class HootMergerGui:
                 compliancies.add(compliancy)
 
         lines: list[str] = [
-            "Place owlet*.exe in the selected folder, next to this app, or in the current working folder.",
+            "Place an owlet executable (owlet* or owlet*.exe) in the selected folder, next to this app, or in the current working folder.",
             f"Download owlet from: {_OWLET_DOWNLOAD_URL}",
         ]
 
         popup_parts: list[str] = [
-            "No owlet executable found (owlet*.exe).",
+            "No owlet executable found (owlet* / owlet*.exe).",
             f"Download: {_OWLET_DOWNLOAD_URL}",
         ]
 

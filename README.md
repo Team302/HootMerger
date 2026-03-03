@@ -25,7 +25,7 @@ GUI behavior:
 - Optional toggle: write `missing_signals.csv`
 - Optional toggle: write `signals.csv`
 
-The GUI attempts to locate `owlet*.exe` in the selected folder, next to the app, or in the current working folder.
+The GUI attempts to locate an owlet executable (`owlet*` on Linux/macOS or `owlet*.exe` on Windows) in the selected folder, next to the app, or in the current working folder.
 
 If owlet is missing, the GUI shows:
 
@@ -33,7 +33,7 @@ If owlet is missing, the GUI shows:
 - Detected required owlet compliancy from selected `.hoot` files (for example `C7`)
 - Matching owlet version labels when CTRE index data is available at runtime
 
-Note: The `owlet*.exe` binaries are not included in this repository and are treated as external tools. Download them separately using the link above and place them alongside your logs or the GUI executable; do not add `owlet*.exe` files to git.
+Note: Owlet binaries are not included in this repository and are treated as external tools. Download them separately using the link above and place them alongside your logs or the GUI executable; do not add owlet binaries to git.
 ## Build Windows EXE (PyInstaller)
 
 Install dependencies:
@@ -52,6 +52,30 @@ Output:
 
 - `dist\HootMergerGUI.exe`
 
+## Build Linux binary (PyInstaller)
+
+Install Linux GUI dependency (Debian/Ubuntu):
+
+```bash
+sudo apt-get update && sudo apt-get install -y python3-tk
+```
+
+Install dependencies:
+
+```bash
+python3 -m pip install -r requirements.txt
+```
+
+Build with included script:
+
+```bash
+./build_gui_linux.sh
+```
+
+Output:
+
+- `dist/HootMergerGUI`
+
 ## Requirements
 
 - Python 3.10+
@@ -64,7 +88,7 @@ Install Python dependency:
 python -m pip install phoenix6
 ```
 
-Place an `owlet*.exe` in the project folder, or pass it explicitly with `--owlet`.
+Place an owlet executable (`owlet*` on Linux/macOS or `owlet*.exe` on Windows) in the project folder, or pass it explicitly with `--owlet`.
 
 ## 1) Merge hoot logs to WPILog
 
